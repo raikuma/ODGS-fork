@@ -34,9 +34,28 @@
 </p>
 
 ---
-* This is an official implementation of "ODGS: 3D Scene Reconstruction from Omnidirectional Images with 3D Gaussian Splatting."
+This is an official implementation of "ODGS: 3D Scene Reconstruction from Omnidirectional Images with 3D Gaussian Splatting."
 
 
-## Notice
-#### Code and the pretrained model will be released shortly.
+### Update Log
+**24.11.08:**  First Upload (CUDA Rasterizer and training code)
+
+
+## Installation
+~~~bash
+git clone https://github.com/esw0116/ODGS.git --recursive
+cd ODGS
+
+# Set Environment
+conda env create --file environment.yml
+conda activate ODGS
+pip install submodules/simple-knn
+pip install submodules/odgs-gaussian-rasterization
+~~~
+
+### Training (Optimization)
+ODGS requires optimization for each scene. Run the script below to start optimization:
+~~~python
+python train.py -s <source(dataset)_path> -m <output_path> --eval
+~~~
 
