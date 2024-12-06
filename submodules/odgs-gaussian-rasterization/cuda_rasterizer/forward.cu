@@ -72,25 +72,22 @@ __device__ glm::vec3 computeColorFromSH(int idx, int deg, int max_coeffs, const 
 
 
 // Forward version of 2D covariance matrix computation in omnidirectional image
-__device__ float3 computeOmniCov2D(const float3& mean, float focal_x, float focal_y, float lon, float lat, const float* cov3D, const float* viewmatrix, const int height, const int width)
+__device__ float3 computeOmniCov2D(float lon, float lat, float dist, const float* cov3D, const float* viewmatrix, const int height, const int width)
 {
-	// The following models the steps outlined by equations 29
-	// and 31 in "EWA Splatting" (Zwicker et al., 2002). 
-	// Additionally considers aspect / scaling of viewport.
+	// The following models the steps outlined by equations (5)-(8)
+	// in "ODGS" (Suyoung Lee et al., 2024). 
 	// Transposes used to account for row-/column-major conventions.
-	float3 t = transformPoint4x3(mean, viewmatrix);
-	float t_dist = sqrt(t.x*t.x + t.y*t.y + t.z*t.z)+0.0000001f;
 
-	const float e = 0.000001f;
-	const float x_scale = (width-1)/(2*M_PI);
-	const float y_scale = (height-1)/(M_PI);
+	const float e = 0.0000001f;
+	const float x_scale = width/(2*M_PI);
+	const float y_scale = height/(M_PI);
 
-	glm::mat3 J = glm::mat3(
-		x_scale/((cos(lat) + e) * t_dist) , 0, 0,
-		0, y_scale/t_dist , 0,
+	glm::mat3 SQJ = glm::mat3(
+		x_scale/((cos(lat) + e) * dist) , 0, 0,
+		0, y_scale/dist , 0,
 		0, 0, 0);
 
-	glm::mat3 S = glm::mat3(
+	glm::mat3 T = glm::mat3(
 		cos(lon), 0.0f, -sin(lon),
 		sin(lat) * sin(lon), cos(lat), sin(lat) * cos(lon),
 		cos(lat) * sin(lon), -sin(lat), cos(lat) * cos(lon));
@@ -100,14 +97,14 @@ __device__ float3 computeOmniCov2D(const float3& mean, float focal_x, float foca
 		viewmatrix[1], viewmatrix[5], viewmatrix[9],
 		viewmatrix[2], viewmatrix[6], viewmatrix[10]);
 
-	glm::mat3 T = W * S * J;
+	glm::mat3 J_o = W * T * SQJ;
 
 	glm::mat3 Vrk = glm::mat3(
 		cov3D[0], cov3D[1], cov3D[2],
 		cov3D[1], cov3D[3], cov3D[4],
 		cov3D[2], cov3D[4], cov3D[5]);
 
-	glm::mat3 cov = glm::transpose(T) * glm::transpose(Vrk) * T;
+	glm::mat3 cov = glm::transpose(J_o) * glm::transpose(Vrk) * J_o;
 
 	// Apply low-pass filter: every Gaussian should be at least
 	// one pixel wide/high. Discard 3rd row and column.
@@ -169,11 +166,8 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	const float* cov3D_precomp,
 	const float* colors_precomp,
 	const float* viewmatrix,
-	const float* projmatrix,
 	const glm::vec3* cam_pos,
 	const int W, int H,
-	const float tan_fovx, float tan_fovy,
-	const float focal_x, float focal_y,
 	int* radii,
 	float* psi,
 	float* lat,
@@ -198,19 +192,16 @@ __global__ void preprocessCUDA(int P, int D, int M,
 
 	// Perform near culling, quit if outside.
 	float3 p_view;
-	if (!in_sphere(idx, orig_points, viewmatrix, projmatrix, prefiltered, p_view))
+	if (!in_sphere(idx, orig_points, viewmatrix, prefiltered, p_view))
 		return;
 
 	// Transform point by projecting
-	float3 p_orig = { orig_points[3 * idx], orig_points[3 * idx + 1], orig_points[3 * idx + 2] };
 	float dist = sqrt(p_view.x*p_view.x + p_view.y*p_view.y + p_view.z*p_view.z)+0.0000001f;
-	float dist_xy = sqrt(p_view.x*p_view.x + p_view.y*p_view.y)+0.0000001f;
 	float dist_xz = sqrt(p_view.x*p_view.x + p_view.z*p_view.z)+0.0000001f;
-	float my_lat = atan2(-p_view.y, dist_xz);   
+	
+	float my_lat = atan2(-p_view.y, dist_xz);
 	float my_lon = atan2(p_view.x, p_view.z);
-	lat[idx] = my_lat;
-	lon[idx] = my_lon;
-	float2 p_omniuv = {(W/2-0.5)/M_PI*my_lon + 0.0*my_lat + (W/2-0.5), 0.0*my_lon -2*(H/2-0.5)/M_PI*my_lat + (H/2-0.5)};
+	float2 point_image = { (my_lon/M_PI+1.0f)*W/2.0f, (0.5f-my_lat/M_PI)*H };
 
 	// If 3D covariance matrix is precomputed, use it, otherwise compute
 	// from scaling and rotation parameters. 
@@ -226,7 +217,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	}
 
 	// Compute 2D screen-space covariance matrix
-	float3 cov = computeOmniCov2D(p_orig, focal_x, focal_y, my_lon, my_lat, cov3D, viewmatrix, H, W);
+	float3 cov = computeOmniCov2D(my_lon, my_lat, dist, cov3D, viewmatrix, H, W);
 
 	// Invert covariance (EWA algorithm)
 	float det = (cov.x * cov.z - cov.y * cov.y);
@@ -244,7 +235,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	float lambda2 = mid - sqrt(max(0.1f, mid * mid - det));
 	float my_radius = ceil(3.f * sqrt(max(lambda1, lambda2)));
 	float my_psi = 0.5f * atan2(2*cov.y, cov.x - cov.z);
-	float2 point_image = p_omniuv;
 	
 	uint2 rect_min, rect_max;
 	getRect(point_image, my_radius, rect_min, rect_max, grid);
@@ -261,10 +251,13 @@ __global__ void preprocessCUDA(int P, int D, int M,
 		rgb[idx * C + 2] = result.z;
 	}
 
+	// Store for densification strategy
+	lat[idx] = my_lat;
+	lon[idx] = my_lon;
+	psi[idx] = my_psi;
 	// Store some useful helper data for the next steps.
 	depths[idx] = dist;
 	radii[idx] = my_radius;
-	psi[idx] = my_psi;
 	points_xy_image[idx] = point_image;
 	// Inverse 2D covariance and opacity neatly pack into one float4
 	conic_opacity[idx] = { conic.x, conic.y, conic.z, opacities[idx] };
@@ -301,7 +294,7 @@ renderCUDA(
 	float2 pixf = { (float)pix.x, (float)pix.y };
 
 	// Check if this thread is associated with a valid pixel or outside.
-	bool inside = pix.x < W&& pix.y < H;
+	bool inside = pix.x < W && pix.y < H;
 	// Done threads can help with fetching, but don't rasterize
 	bool done = !inside;
 
@@ -393,8 +386,7 @@ renderCUDA(
 		n_contrib[pix_id] = last_contributor;
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
-		A += 1e-8;
-        out_depth[pix_id]= D/A;
+        out_depth[pix_id] = D;
         out_acc[pix_id] = A;
 	}
 }
@@ -442,11 +434,8 @@ void FORWARD::preprocess(int P, int D, int M,
 	const float* cov3D_precomp,
 	const float* colors_precomp,
 	const float* viewmatrix,
-	const float* projmatrix,
 	const glm::vec3* cam_pos,
 	const int W, int H,
-	const float focal_x, float focal_y,
-	const float tan_fovx, float tan_fovy,
 	int* radii,
 	float* psi,
 	float* lat,
@@ -472,11 +461,8 @@ void FORWARD::preprocess(int P, int D, int M,
 		cov3D_precomp,
 		colors_precomp,
 		viewmatrix, 
-		projmatrix,
 		cam_pos,
 		W, H,
-		tan_fovx, tan_fovy,
-		focal_x, focal_y,
 		radii,
 		psi,
 		lat,

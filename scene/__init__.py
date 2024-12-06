@@ -22,7 +22,7 @@ from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 class Scene:
     gaussians : GaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, preset=None, resolution_scales=[1.0]):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0]):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -40,7 +40,6 @@ class Scene:
 
         self.train_cameras = {}
         self.test_cameras = {}
-        self.preset_cameras = {}
 
         if os.path.exists(os.path.join(args.source_path, "sparse")):
             scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
@@ -74,9 +73,6 @@ class Scene:
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
             print("Loading Test Cameras")
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
-            if preset is not None:
-                print("Loading Preset Cameras")
-                self.preset_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.preset_cameras, resolution_scale, args)
 
         if self.loaded_iter:
             self.gaussians.load_ply(os.path.join(self.model_path,
@@ -95,6 +91,3 @@ class Scene:
 
     def getTestCameras(self, scale=1.0):
         return self.test_cameras[scale]
-    
-    def getPresetCameras(self, scale=1.0):
-        return self.preset_cameras[scale]

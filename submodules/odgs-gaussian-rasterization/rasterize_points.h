@@ -26,9 +26,6 @@ RasterizeGaussiansCUDA(
 	const float scale_modifier,
 	const torch::Tensor& cov3D_precomp,
 	const torch::Tensor& viewmatrix,
-	const torch::Tensor& projmatrix,
-	const float tan_fovx, 
-	const float tan_fovy,
     const int image_height,
     const int image_width,
 	const torch::Tensor& sh,
@@ -50,9 +47,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	const float scale_modifier,
 	const torch::Tensor& cov3D_precomp,
 	const torch::Tensor& viewmatrix,
-    const torch::Tensor& projmatrix,
-	const float tan_fovx, 
-	const float tan_fovy,
     const torch::Tensor& dL_dout_color,
 	const torch::Tensor& dL_dout_depth,
 	const torch::Tensor& dL_dout_acc,
@@ -67,6 +61,5 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 		
 torch::Tensor markVisible(
 		torch::Tensor& means3D,
-		torch::Tensor& viewmatrix,
-		torch::Tensor& projmatrix);
+		torch::Tensor& viewmatrix);
 		

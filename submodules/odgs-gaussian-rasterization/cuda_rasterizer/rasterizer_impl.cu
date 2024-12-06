@@ -51,10 +51,9 @@ uint32_t getHigherMsb(uint32_t n)
 
 // Wrapper method to call auxiliary coarse frustum containment test.
 // Mark all Gaussians that pass it.
-__global__ void checkFrustum(int P,
+__global__ void checkSphereShell(int P,
 	const float* orig_points,
 	const float* viewmatrix,
-	const float* projmatrix,
 	bool* present)
 {
 	auto idx = cg::this_grid().thread_rank();
@@ -62,8 +61,7 @@ __global__ void checkFrustum(int P,
 		return;
 
 	float3 p_view;
-	// present[idx] = in_frustum(idx, orig_points, viewmatrix, projmatrix, false, p_view);
-	present[idx] = in_sphere(idx, orig_points, viewmatrix, projmatrix, false, p_view);
+	present[idx] = in_sphere(idx, orig_points, viewmatrix, false, p_view);
 }
 
 // Generates one key/value pair for all Gaussian / tile overlaps. 
@@ -143,13 +141,12 @@ void CudaRasterizer::Rasterizer::markVisible(
 	int P,
 	float* means3D,
 	float* viewmatrix,
-	float* projmatrix,
 	bool* present)
 {
-	checkFrustum << <(P + 255) / 256, 256 >> > (
+	checkSphereShell << <(P + 255) / 256, 256 >> > (
 		P,
 		means3D,
-		viewmatrix, projmatrix,
+		viewmatrix,
 		present);
 }
 
@@ -213,9 +210,7 @@ int CudaRasterizer::Rasterizer::forward(
 	const float* rotations,
 	const float* cov3D_precomp,
 	const float* viewmatrix,
-	const float* projmatrix,
 	const float* cam_pos,
-	const float tan_fovx, float tan_fovy,
 	const bool prefiltered,
 	float* out_color,
 	float* out_depth,
@@ -226,9 +221,6 @@ int CudaRasterizer::Rasterizer::forward(
 	float* lon,
 	bool debug)
 {
-	const float focal_y = height / (2.0f * tan_fovy);
-	const float focal_x = width / (2.0f * tan_fovx);
-
 	size_t chunk_size = required<GeometryState>(P);
 	char* chunkptr = geometryBuffer(chunk_size);
 	GeometryState geomState = GeometryState::fromChunk(chunkptr, P);
@@ -278,11 +270,9 @@ int CudaRasterizer::Rasterizer::forward(
 		geomState.clamped,
 		cov3D_precomp,
 		colors_precomp,
-		viewmatrix, projmatrix,
+		viewmatrix,
 		(glm::vec3*)cam_pos,
 		width, height,
-		focal_x, focal_y,
-		tan_fovx, tan_fovy,
 		radii,
 		psi,
 		lat,
@@ -379,9 +369,7 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* rotations,
 	const float* cov3D_precomp,
 	const float* viewmatrix,
-	const float* projmatrix,
 	const float* campos,
-	const float tan_fovx, float tan_fovy,
 	const int* radii,
 	char* geom_buffer,
 	char* binning_buffer,
@@ -393,6 +381,7 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_dconic,
 	float* dL_dopacity,
 	float* dL_dcolor,
+	float* dL_ddepth,
 	float* dL_dmean3D,
 	float* dL_dcov3D,
 	float* dL_dsh,
@@ -409,12 +398,8 @@ void CudaRasterizer::Rasterizer::backward(
 		radii = geomState.internal_radii;
 	}
 
-	const float focal_y = height / (2.0f * tan_fovy);
-	const float focal_x = width / (2.0f * tan_fovx);
-
 	const dim3 tile_grid((width + BLOCK_X - 1) / BLOCK_X, (height + BLOCK_Y - 1) / BLOCK_Y, 1);
 	const dim3 block(BLOCK_X, BLOCK_Y, 1);
-	float* dL_ddepths;
 
 	// Compute loss gradients w.r.t. 2D mean position, conic matrix,
 	// opacity and RGB of Gaussians from per-pixel loss gradients.
@@ -443,7 +428,7 @@ void CudaRasterizer::Rasterizer::backward(
 		(float4*)dL_dconic,
 		dL_dopacity,
 		dL_dcolor,
-		dL_ddepths
+		dL_ddepth
 		), debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
@@ -461,15 +446,12 @@ void CudaRasterizer::Rasterizer::backward(
 		scale_modifier,
 		cov3D_ptr,
 		viewmatrix,
-		projmatrix,
-		focal_x, focal_y,
-		tan_fovx, tan_fovy,
 		(glm::vec3*)campos,
 		(float3*)dL_dmean2D,
 		dL_dconic,
+		dL_ddepth,
 		(glm::vec3*)dL_dmean3D,
 		dL_dcolor,
-		dL_ddepths,
 		dL_dcov3D,
 		dL_dsh,
 		(glm::vec3*)dL_dscale,

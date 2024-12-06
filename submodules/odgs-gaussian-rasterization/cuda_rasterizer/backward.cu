@@ -141,20 +141,19 @@ __device__ void computeColorFromSH(int idx, int deg, int max_coeffs, const glm::
 // Backward version of INVERSE 2D covariance matrix computation
 // (due to length launched as separate kernel before other 
 // backward steps contained in preprocess)
-__global__ void computeCov2DCUDA(int P, 
+__global__ void computeOmniCov2D(int P, 
 	const int height,
 	const int width,
 	const float3* means,
 	const int* radii,
 	const float* cov3Ds,
-	const float h_x, float h_y,
-	const float tan_fovx, float tan_fovy,
-	const float* view_matrix,
+	const float* viewmatrix,
 	const float* dL_dconics,
-	const float* dL_ddepths,
 	float3* dL_dmeans,
 	float* dL_dcov)
 {
+	// The derivation of the backward steps is outlined by equations (11)-(12)
+	// of Appendix A.3 in "ODGS" (Suyoung Lee et al., 2024). 
 	auto idx = cg::this_grid().thread_rank();
 	if (idx >= P || !(radii[idx] > 0))
 		return;
@@ -164,44 +163,42 @@ __global__ void computeCov2DCUDA(int P,
 
 	// Fetch gradients, recompute 2D covariance and relevant 
 	// intermediate forward results needed in the backward.
+	const float e = 0.0000001f;
 	float3 mean = means[idx];
 	float3 dL_dconic = { dL_dconics[4 * idx], dL_dconics[4 * idx + 1], dL_dconics[4 * idx + 3] };
-	float3 t = transformPoint4x3(mean, view_matrix);
+	float3 t = transformPoint4x3(mean, viewmatrix);
 
-	float t_dist = sqrt(t.x*t.x + t.y*t.y + t.z*t.z)+0.0000001f;
-	float t_dist_xz = sqrt(t.x*t.x + t.z*t.z)+0.0000001f;
-	float lat = atan2(-t.y, t_dist_xz);   
+	float dist = sqrt(t.x*t.x + t.y*t.y + t.z*t.z)+e;
+	float dist_xz = sqrt(t.x*t.x + t.z*t.z)+e;
+	float lat = atan2(-t.y, dist_xz);   
 	float lon = atan2(t.x, t.z);
 	
-	const float x_grad_mul = 1;
-	const float y_grad_mul = 1;
+	const float x_scale = width/(2*M_PI);
+	const float y_scale = height/(M_PI);
 
-	const float e = 0.000001f;
-	const float x_scale = (width-1)/(2*M_PI);
-	const float y_scale = (height-1)/(M_PI);
-
-	glm::mat3 J = glm::mat3(
-		x_scale / ((cos(lat) + e) * t_dist) , 0, 0,
-		0, y_scale / t_dist, 0,
+	glm::mat3 SQJ = glm::mat3(
+		x_scale/((cos(lat) + e) * dist) , 0, 0,
+		0, y_scale/dist, 0,
 		0, 0, 0);
 
-	glm::mat3 S = glm::mat3(
+	glm::mat3 T = glm::mat3(
 		cos(lon), 0.0f, -sin(lon),
 		sin(lat) * sin(lon), cos(lat), sin(lat) * cos(lon),
 		cos(lat) * sin(lon), -sin(lat), cos(lat) * cos(lon));
 
 	glm::mat3 W = glm::mat3(
-		view_matrix[0], view_matrix[4], view_matrix[8],
-		view_matrix[1], view_matrix[5], view_matrix[9],
-		view_matrix[2], view_matrix[6], view_matrix[10]);
+		viewmatrix[0], viewmatrix[4], viewmatrix[8],
+		viewmatrix[1], viewmatrix[5], viewmatrix[9],
+		viewmatrix[2], viewmatrix[6], viewmatrix[10]);
 
 	glm::mat3 Vrk = glm::mat3(
 		cov3D[0], cov3D[1], cov3D[2],
 		cov3D[1], cov3D[3], cov3D[4],
 		cov3D[2], cov3D[4], cov3D[5]);
 
-	glm::mat3 T = W * S * J;
-	glm::mat3 cov2D = glm::transpose(T) * glm::transpose(Vrk) * T;
+	glm::mat3 J_o = W * T * SQJ;
+
+	glm::mat3 cov2D = glm::transpose(J_o) * glm::transpose(Vrk) * J_o;
 
 	// Use helper variables for 2D covariance entries. More compact.
 	float a = cov2D[0][0] += 0.3f;
@@ -210,13 +207,12 @@ __global__ void computeCov2DCUDA(int P,
 
 	float denom = a * c - b * b;
 	float dL_da = 0, dL_db = 0, dL_dc = 0;
-	float denom2inv = 1.0f / ((denom * denom) + 0.0000001f);
+	float denom2inv = 1.0f / ((denom * denom) + e);
 
 	if (denom2inv != 0)
 	{
 		// Gradients of loss w.r.t. entries of 2D covariance matrix,
 		// given gradients of loss w.r.t. conic matrix (inverse covariance matrix).
-
 		dL_da = denom2inv * (-c * c * dL_dconic.x + 2 * b * c * dL_dconic.y + (denom - a * c) * dL_dconic.z);
 		dL_dc = denom2inv * (-a * a * dL_dconic.z + 2 * a * b * dL_dconic.y + (denom - a * c) * dL_dconic.x);
 		dL_db = denom2inv * 2 * (b * c * dL_dconic.x - (denom + 2 * b * b) * dL_dconic.y + a * b * dL_dconic.z);
@@ -261,10 +257,9 @@ __global__ void computeCov2DCUDA(int P,
 	float dL_dJ11 = W[1][0] * dL_dT10 + W[1][1] * dL_dT11 + W[1][2] * dL_dT12;
 	float dL_dJ12 = W[2][0] * dL_dT10 + W[2][1] * dL_dT11 + W[2][2] * dL_dT12;
 
-	float dist = sqrt(t.x*t.x + t.y*t.y + t.z*t.z);
+	// Gradients of loss w.r.t. position in camera space
 	float dist2 = dist * dist;
 	float dist4 = dist2 * dist2;
-	float dist_xz = sqrt(t.x*t.x + t.z*t.z);
 	float dist_xz2 = dist_xz * dist_xz;
 	float dist_xz3 = dist_xz2 * dist_xz;
 	float dist_xz4 = dist_xz2 * dist_xz2;
@@ -277,7 +272,7 @@ __global__ void computeCov2DCUDA(int P,
 	float dL_dtz = x_scale * (denom1 - t.z * t.z * (2 + e*(dist/dist_xz + dist_xz/dist))) / denom2 * dL_dJ00 + x_scale * t.x * t.z * (2 + e*(dist/dist_xz + dist_xz/dist)) * dL_dJ02 + y_scale * t.x * t.y * t.z * (2*dist_xz2 + dist2) / dist4 / dist_xz3 * dL_dJ10 - y_scale * t.z * (dist2 - 2 * t.y * t.y) / dist4 / dist_xz * dL_dJ11 - y_scale * t.y * (t.x * t.x * dist2 - 2 * t.z * t.z * dist_xz2) / dist4 / dist_xz3 * dL_dJ12;
 
 	// Account for transformation of mean to t
-	float3 dL_dmean = transformVec4x3Transpose({ dL_dtx, dL_dty, dL_dtz }, view_matrix);
+	float3 dL_dmean = transformVec4x3Transpose({ dL_dtx, dL_dty, dL_dtz }, viewmatrix);
 
 	// Gradients of loss w.r.t. Gaussian means, but only the portion 
 	// that is caused because the mean affects the covariance matrix.
@@ -340,10 +335,10 @@ __device__ void computeCov3D(int idx, const glm::vec3 scale, float mod, const gl
 
 	// Gradients of loss w.r.t. normalized quaternion
 	glm::vec4 dL_dq;
-	dL_dq.x = 2 * z * (dL_dMt[0][1] - dL_dMt[1][0]) + 2 * y * (dL_dMt[2][0] - dL_dMt[0][2]) + 2 * x * (dL_dMt[1][2] - dL_dMt[2][1]);
-	dL_dq.y = 2 * y * (dL_dMt[1][0] + dL_dMt[0][1]) + 2 * z * (dL_dMt[2][0] + dL_dMt[0][2]) + 2 * r * (dL_dMt[1][2] - dL_dMt[2][1]) - 4 * x * (dL_dMt[2][2] + dL_dMt[1][1]);
-	dL_dq.z = 2 * x * (dL_dMt[1][0] + dL_dMt[0][1]) + 2 * r * (dL_dMt[2][0] - dL_dMt[0][2]) + 2 * z * (dL_dMt[1][2] + dL_dMt[2][1]) - 4 * y * (dL_dMt[2][2] + dL_dMt[0][0]);
-	dL_dq.w = 2 * r * (dL_dMt[0][1] - dL_dMt[1][0]) + 2 * x * (dL_dMt[2][0] + dL_dMt[0][2]) + 2 * y * (dL_dMt[1][2] + dL_dMt[2][1]) - 4 * z * (dL_dMt[1][1] + dL_dMt[0][0]);
+	dL_dq.x = 2*z*(dL_dMt[0][1] - dL_dMt[1][0]) + 2*y*(dL_dMt[2][0] - dL_dMt[0][2]) + 2*x*(dL_dMt[1][2] - dL_dMt[2][1]);
+	dL_dq.y = 2*y*(dL_dMt[1][0] + dL_dMt[0][1]) + 2*z*(dL_dMt[2][0] + dL_dMt[0][2]) + 2*r*(dL_dMt[1][2] - dL_dMt[2][1]) - 4*x*(dL_dMt[2][2] + dL_dMt[1][1]);
+	dL_dq.z = 2*x*(dL_dMt[1][0] + dL_dMt[0][1]) + 2*r*(dL_dMt[2][0] - dL_dMt[0][2]) + 2*z*(dL_dMt[1][2] + dL_dMt[2][1]) - 4*y*(dL_dMt[2][2] + dL_dMt[0][0]);
+	dL_dq.w = 2*r*(dL_dMt[0][1] - dL_dMt[1][0]) + 2*x*(dL_dMt[2][0] + dL_dMt[0][2]) + 2*y*(dL_dMt[1][2] + dL_dMt[2][1]) - 4*z*(dL_dMt[1][1] + dL_dMt[0][0]);
 
 	// Gradients of loss w.r.t. unnormalized quaternion
 	float4* dL_drot = (float4*)(dL_drots + idx);
@@ -365,12 +360,12 @@ __global__ void preprocessCUDA(
 	const glm::vec4* rotations,
 	const float scale_modifier,
 	const float* viewmatrix,
-	const float* proj,
 	const glm::vec3* campos,
 	const float3* dL_dmean2D,
+	const float* dL_dcov3D,
+	const float* dL_ddepth,
 	glm::vec3* dL_dmeans,
 	float* dL_dcolor,
-	float* dL_dcov3D,
 	float* dL_dsh,
 	glm::vec3* dL_dscale,
 	glm::vec4* dL_drot)
@@ -379,19 +374,31 @@ __global__ void preprocessCUDA(
 	if (idx >= P || !(radii[idx] > 0))
 		return;
 
-	float3 m = means[idx];
-	float3 m_view = transformPoint4x3(m, viewmatrix);
-	glm::vec3 dL_dmean;
-	float dist = sqrt(m_view.x*m_view.x + m_view.y*m_view.y + m_view.z*m_view.z)+0.0000001f;
-	float dist_xz = sqrt(m_view.x*m_view.x + m_view.z*m_view.z)+0.0000001f;
+	float3 mean = means[idx];
+	float3 t = transformPoint4x3(mean, viewmatrix);
+	
+	float dist = sqrt(t.x*t.x + t.y*t.y + t.z*t.z)+0.0000001f;
+	float dist2 = dist * dist;
+	float dist_xz = sqrt(t.x*t.x + t.z*t.z)+0.0000001f;
+	float dist_xz2 = dist_xz * dist_xz;
 
-	dL_dmean.x = ((W/2-0.5)/M_PI) * ( (viewmatrix[0]*m_view.z - viewmatrix[2]*m_view.x) / (dist_xz * dist_xz)) * dL_dmean2D[idx].x + (-2*(H/2-0.5)/M_PI) * ( (-viewmatrix[1]*dist_xz*dist_xz + (viewmatrix[0]*m_view.x+viewmatrix[2]*m_view.z)*m_view.y ) / (dist * dist * dist_xz)) * dL_dmean2D[idx].y;
-	dL_dmean.y = ((W/2-0.5)/M_PI) * ( (viewmatrix[4]*m_view.z - viewmatrix[6]*m_view.x) / (dist_xz * dist_xz)) * dL_dmean2D[idx].x + (-2*(H/2-0.5)/M_PI) * ( (-viewmatrix[5]*dist_xz*dist_xz + (viewmatrix[4]*m_view.x+viewmatrix[6]*m_view.z)*m_view.y ) / (dist * dist * dist_xz)) * dL_dmean2D[idx].y;
-	dL_dmean.z = ((W/2-0.5)/M_PI) * ( (viewmatrix[8]*m_view.z - viewmatrix[10]*m_view.x) / (dist_xz * dist_xz)) * dL_dmean2D[idx].x + (-2*(H/2-0.5)/M_PI) * ( (-viewmatrix[9]*dist_xz*dist_xz + (viewmatrix[8]*m_view.x+viewmatrix[10]*m_view.z)*m_view.y ) / (dist * dist * dist_xz)) * dL_dmean2D[idx].y;
+	const float x_scale = W/(2*M_PI)/dist_xz2;
+	const float y_scale = H/(M_PI)/(dist2*dist_xz);
 
 	// That's the second part of the mean gradient. Previous computation
 	// of cov2D and following SH conversion also affects it.
+	glm::vec3 dL_dmean;
+	dL_dmean.x = x_scale*(viewmatrix[0]*t.z - viewmatrix[2]*t.x )*dL_dmean2D[idx].x + y_scale*(viewmatrix[1]*dist_xz2 - (viewmatrix[0]*t.x + viewmatrix[2]*t.z)*t.y )*dL_dmean2D[idx].y;
+	dL_dmean.y = x_scale*(viewmatrix[4]*t.z - viewmatrix[6]*t.x )*dL_dmean2D[idx].x + y_scale*(viewmatrix[5]*dist_xz2 - (viewmatrix[4]*t.x + viewmatrix[6]*t.z)*t.y )*dL_dmean2D[idx].y;
+	dL_dmean.z = x_scale*(viewmatrix[8]*t.z - viewmatrix[10]*t.x)*dL_dmean2D[idx].x + y_scale*(viewmatrix[9]*dist_xz2 - (viewmatrix[8]*t.x + viewmatrix[10]*t.z)*t.y)*dL_dmean2D[idx].y;
 	dL_dmeans[idx] += dL_dmean;
+	
+	// That's the third part of the mean gradient. for omnidirectional depth (=dist)
+	glm::vec3 dL_dmean2;
+	dL_dmean2.x = (viewmatrix[0]*t.x + viewmatrix[1]*t.y + viewmatrix[2]*t.z)/dist * dL_ddepth[idx];
+	dL_dmean2.y = (viewmatrix[4]*t.x + viewmatrix[5]*t.y + viewmatrix[6]*t.z)/dist * dL_ddepth[idx];
+	dL_dmean2.z = (viewmatrix[8]*t.x + viewmatrix[9]*t.y + viewmatrix[10]*t.z)/dist * dL_ddepth[idx];
+	dL_dmeans[idx] += dL_dmean2;
 
 	// Compute gradient updates due to computing colors from SHs
 	if (shs)
@@ -437,7 +444,7 @@ renderCUDA(
 	const uint32_t pix_id = W * pix.y + pix.x;
 	const float2 pixf = { (float)pix.x, (float)pix.y };
 
-	const bool inside = pix.x < W&& pix.y < H;
+	const bool inside = pix.x < W && pix.y < H;
 	const uint2 range = ranges[block.group_index().y * horizontal_blocks + block.group_index().x];
 
 	const int rounds = ((range.y - range.x + BLOCK_SIZE - 1) / BLOCK_SIZE);
@@ -586,15 +593,12 @@ void BACKWARD::preprocess(
 	const float scale_modifier,
 	const float* cov3Ds,
 	const float* viewmatrix,
-	const float* projmatrix,
-	const float focal_x, float focal_y,
-	const float tan_fovx, float tan_fovy,
 	const glm::vec3* campos,
 	const float3* dL_dmean2D,
 	const float* dL_dconic,
+	const float* dL_ddepth,
 	glm::vec3* dL_dmean3D,
 	float* dL_dcolor,
-	float* dL_ddepths,
 	float* dL_dcov3D,
 	float* dL_dsh,
 	glm::vec3* dL_dscale,
@@ -604,18 +608,13 @@ void BACKWARD::preprocess(
 	// Somewhat long, thus it is its own kernel rather than being part of 
 	// "preprocess". When done, loss gradient w.r.t. 3D means has been
 	// modified and gradient w.r.t. 3D covariance matrix has been computed.	
-	computeCov2DCUDA << <(P + 255) / 256, 256 >> > (
+	computeOmniCov2D << <(P + 255) / 256, 256 >> > (
 		P, width, height,
 		means3D,
 		radii,
 		cov3Ds,
-		focal_x,
-		focal_y,
-		tan_fovx,
-		tan_fovy,
 		viewmatrix,
 		dL_dconic,
-		dL_ddepths,
 		(float3*)dL_dmean3D,
 		dL_dcov3D);
 
@@ -633,12 +632,12 @@ void BACKWARD::preprocess(
 		(glm::vec4*)rotations,
 		scale_modifier,
 		viewmatrix,
-		projmatrix,
 		campos,
 		(float3*)dL_dmean2D,
+		dL_dcov3D,
+		dL_ddepth,
 		(glm::vec3*)dL_dmean3D,
 		dL_dcolor,
-		dL_dcov3D,
 		dL_dsh,
 		dL_dscale,
 		dL_drot);

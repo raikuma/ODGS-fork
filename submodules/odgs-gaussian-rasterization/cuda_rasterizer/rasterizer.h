@@ -25,7 +25,6 @@ namespace CudaRasterizer
 			int P,
 			float* means3D,
 			float* viewmatrix,
-			float* projmatrix,
 			bool* present);
 
 		static int forward(
@@ -44,9 +43,7 @@ namespace CudaRasterizer
 			const float* rotations,
 			const float* cov3D_precomp,
 			const float* viewmatrix,
-			const float* projmatrix,
 			const float* cam_pos,
-			const float tan_fovx, float tan_fovy,
 			const bool prefiltered,
 			float* out_color,
 			float* out_depth,
@@ -71,9 +68,7 @@ namespace CudaRasterizer
 			const float* rotations,
 			const float* cov3D_precomp,
 			const float* viewmatrix,
-			const float* projmatrix,
 			const float* campos,
-			const float tan_fovx, float tan_fovy,
 			const int* radii,
 			char* geom_buffer,
 			char* binning_buffer,
@@ -85,6 +80,7 @@ namespace CudaRasterizer
 			float* dL_dconic,
 			float* dL_dopacity,
 			float* dL_dcolor,
+			float* dL_ddepth,
 			float* dL_dmean3D,
 			float* dL_dcov3D,
 			float* dL_dsh,

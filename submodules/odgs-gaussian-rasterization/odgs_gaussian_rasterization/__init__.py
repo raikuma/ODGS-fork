@@ -67,9 +67,6 @@ class _RasterizeGaussians(torch.autograd.Function):
             raster_settings.scale_modifier,
             cov3Ds_precomp,
             raster_settings.viewmatrix,
-            raster_settings.projmatrix,
-            raster_settings.tanfovx,
-            raster_settings.tanfovy,
             raster_settings.image_height,
             raster_settings.image_width,
             sh,
@@ -117,9 +114,6 @@ class _RasterizeGaussians(torch.autograd.Function):
                 raster_settings.scale_modifier, 
                 cov3Ds_precomp, 
                 raster_settings.viewmatrix, 
-                raster_settings.projmatrix, 
-                raster_settings.tanfovx, 
-                raster_settings.tanfovy, 
                 grad_out_color, 
                 grad_out_depth,
                 grad_out_acc,
@@ -161,12 +155,9 @@ class _RasterizeGaussians(torch.autograd.Function):
 class GaussianRasterizationSettings(NamedTuple):
     image_height: int
     image_width: int 
-    tanfovx : float
-    tanfovy : float
     bg : torch.Tensor
     scale_modifier : float
     viewmatrix : torch.Tensor
-    projmatrix : torch.Tensor
     sh_degree : int
     campos : torch.Tensor
     prefiltered : bool
@@ -183,8 +174,7 @@ class GaussianRasterizer(nn.Module):
             raster_settings = self.raster_settings
             visible = _C.mark_visible(
                 positions,
-                raster_settings.viewmatrix,
-                raster_settings.projmatrix)
+                raster_settings.viewmatrix)
             
         return visible
 

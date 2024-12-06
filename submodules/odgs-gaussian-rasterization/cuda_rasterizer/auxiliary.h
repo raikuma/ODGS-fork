@@ -139,7 +139,6 @@ __forceinline__ __device__ float sigmoid(float x)
 __forceinline__ __device__ bool in_sphere(int idx,
 	const float* orig_points,
 	const float* viewmatrix,
-	const float* projmatrix,
 	bool prefiltered,
 	float3& p_view)
 {
