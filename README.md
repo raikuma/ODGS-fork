@@ -57,8 +57,7 @@ pip install submodules/odgs-gaussian-rasterization
 
 ## Dataset
 We evaluate 6 datasets by adjusting their resolutions and performing Structure-from-Motion using OpenMVG.  
-:star: For your convenience, we provide [**links to the adjusted datasets**](https://drive.google.com/drive/folders/1xLdy0Zh6K1vAN_WpTWg4RTTUPxxv8RFp?usp=sharing) used in our paper.  
-OmniBlender / Ricoh360 / OmniPhotos / ~~360Roam~~ / OmniScenes / 360VO  
+For your convenience, we provide :star:[**links to the adjusted datasets**](https://drive.google.com/drive/folders/1xLdy0Zh6K1vAN_WpTWg4RTTUPxxv8RFp?usp=sharing):star: used in our paper.  
 **Note**: The authors of 360Roam dataset do not want to distribute thier datasets yet (8 Dec. 2024), so we will not provide here. If you need, please contact them.
 
 For reference, we provide the links to the **original datasets** here.  
@@ -69,10 +68,6 @@ ODGS requires optimization for each scene. Run the script below to start optimiz
 ~~~python
 python train.py -s <source(dataset)_path> -m <output_path> --eval
 ~~~
-
-<p align="center">
-    <img src="assets/qual_v.png" width=800>
-</p>
 
 <section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
@@ -85,3 +80,9 @@ python train.py -s <source(dataset)_path> -m <output_path> --eval
 }</code></pre>
   </div>
 </section>
+
+## Figure
+
+<p align="center">
+    <img src="assets/qual_v.png" width=800>
+</p>
