@@ -148,7 +148,7 @@ __forceinline__ __device__ bool in_sphere(int idx,
 	// Bring points to screen space
 	float dist = sqrt(p_view.x*p_view.x + p_view.y*p_view.y + p_view.z*p_view.z)+0.0000001f;
 
-	if (dist <= 0.2f)// || ((p_proj.x < -1.3 || p_proj.x > 1.3 || p_proj.y < -1.3 || p_proj.y > 1.3)))
+	if (dist <= 0.2f)
 	{
 		if (prefiltered)
 		{

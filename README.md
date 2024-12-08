@@ -15,6 +15,7 @@
     (* denotes equal contribution)
   </p>
   <h3 align="center">NeurIPS 2024</h3>
+
 </p>
 
 
@@ -32,7 +33,7 @@
 </p>
 
 ---
-This is an official implementation of "ODGS: 3D Scene Reconstruction from Omnidirectional Images with 3D Gaussian Splatting."
+This is an official implementation of ["ODGS: 3D Scene Reconstruction from Omnidirectional Images with 3D Gaussian Splatting."](https://arxiv.org/abs/2410.20686)
 
 <p align="center">
     <img src="assets/method_coord.png" height=400>
@@ -40,7 +41,7 @@ This is an official implementation of "ODGS: 3D Scene Reconstruction from Omnidi
 
 
 ### Update Log
-**24.12.08:**  First Upload (CUDA Rasterizer and training code)
+**24.12.08:**  First upload (CUDA rasterizer and training code)
 
 
 ## Installation
@@ -81,7 +82,7 @@ python train.py -s <source(dataset)_path> -m <output_path> --eval
   </div>
 </section>
 
-## Figure
+## Qualitative Comparisons
 
 <p align="center">
     <img src="assets/qual_v.png" width=800>
