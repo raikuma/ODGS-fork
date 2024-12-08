@@ -57,9 +57,9 @@ pip install submodules/odgs-gaussian-rasterization
 
 ## Dataset
 We evaluate 6 datasets by adjusting their resolutions and performing Structure-from-Motion using OpenMVG.  
-:star: For your convenience, we provide links to the **adjusted datasets used in our paper**.  
-[OmniBlender]() / [Ricoh360]() / [OmniPhotos]() / ~~360Roam~~ / [OmniScenes]() / [360VO]()  
-**Note:** The authors of 360Roam dataset do not want to distribute thier datasets yet (8 Dec. 2024), so we will not provide here. If you need, please contact them.
+:star: For your convenience, we provide [**links to the adjusted datasets**](https://drive.google.com/drive/folders/1xLdy0Zh6K1vAN_WpTWg4RTTUPxxv8RFp?usp=sharing) used in our paper.  
+OmniBlender / Ricoh360 / OmniPhotos / ~~360Roam~~ / OmniScenes / 360VO  
+**Note**: The authors of 360Roam dataset do not want to distribute thier datasets yet (8 Dec. 2024), so we will not provide here. If you need, please contact them.
 
 For reference, we provide the links to the **original datasets** here.  
 [OmniBlender & Ricoh360](https://github.com/changwoonchoi/EgoNeRF) / [OmniPhotos](https://github.com/cr333/OmniPhotos?tab=readme-ov-file) / [360Roam](https://huajianup.github.io/research/360Roam/) / [OmniScenes](https://github.com/82magnolia/piccolo) / [360VO](https://huajianup.github.io/research/360VO/)  
