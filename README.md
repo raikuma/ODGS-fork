@@ -1,4 +1,11 @@
 
+<div align="center">
+
+[![Project](https://img.shields.io/badge/Project-ODGS-green)](https://robot0321.github.io/odgs/index.html)
+[![ArXiv](https://img.shields.io/badge/Arxiv-2410.20686-red)](https://arxiv.org/abs/2410.20686)
+[![SlidesLive](https://img.shields.io/badge/SlidesLive-Video-blue)](https://recorder-v3.slideslive.com/#/share?share=95518&s=8f3c36ff-7c37-4acd-92da-9f473575a26e)
+
+</div>
 
 
 <p align="center">
@@ -41,7 +48,8 @@ This is an official implementation of ["ODGS: 3D Scene Reconstruction from Omnid
 
 
 ### Update Log
-**24.12.08:**  First upload (CUDA rasterizer and training code)
+**24.12.08:**  First upload (CUDA rasterizer and training code)  
+**24.12.26:**  Update project page and video hyperlink
 
 
 ## Installation
@@ -74,10 +82,11 @@ python train.py -s <source(dataset)_path> -m <output_path> --eval
   <div class="container is-max-desktop content">
     <h2 class="title">Citation</h2>
     <pre><code>@article{lee2024odgs,
-  title={ODGS: 3D Scene Reconstruction from Omnidirectional Images with 3D Gaussian Splattings},
-  author={Lee, Suyoung and Chung, Jaeyoung and Huh, Jaeyoo and Lee, Kyoung Mu},
-  journal={arXiv preprint arXiv:2410.20686},
-  year={2024}
+      title={ODGS: 3D Scene Reconstruction from Omnidirectional Images with 3D Gaussian Splattings},
+      author={Lee, Suyoung and Chung, Jaeyoung and Huh, Jaeyoo and Lee, Kyoung Mu},
+      journal={Advances in Neural Information Processing Systems (NeurIPS)},
+      volume={37},
+      year={2024}
 }</code></pre>
   </div>
 </section>
