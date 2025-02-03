@@ -375,6 +375,43 @@ def readOpenMVGInfo(path, white_background, eval):
                            ply_path=ply_path)
     return scene_info
 
+def readCamerasFromOmniMVG(path, extrinsicsfile, cam_dict, white_background):
+    cam_infos = []
+
+    with open(os.path.join(path, extrinsicsfile)) as json_file:
+        contents = json.load(json_file)
+        # fovx = contents["camera_angle_x"]
+        # fovx = 1.59451063 # 0.8279103882874479
+        fovx = 3.13768641
+
+        frames = contents["extrinsics"]
+        for idx, frame in enumerate(frames):
+            cam_key = frame["key"]
+            cam_name = os.path.join(path, 'imgs', cam_dict[cam_key])
+            
+            R = np.array(frame["value"]["rotation"]).T
+            T = -np.array(frame["value"]["rotation"]) @ np.array(frame["value"]["center"])
+
+            image_path = os.path.join(path, cam_name)
+            image_name = Path(cam_name).stem
+            image = Image.open(image_path)
+
+            im_data = np.array(image.convert("RGBA"))
+            bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
+
+            norm_data = im_data / 255.0
+            arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
+            image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
+
+            fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
+            FovY = fovy 
+            FovX = fovx
+
+            cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
+                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1]))
+            
+    return cam_infos
+
 def readCamerasDictFromOmniMVG(path, viewfile):
     cam_dict = {}
 
@@ -392,8 +429,8 @@ def readOmniMVGInfo(path, white_background, eval):
     camfile_dict_train = readCamerasDictFromOmniMVG(path, "openMVG/data_openmvg_train.json")
     camfile_dict_test = readCamerasDictFromOmniMVG(path, "openMVG/data_openmvg_test.json")
 
-    train_cam_infos_unsorted = readCamerasFromOpenMVG(path, "openMVG/data_openmvg_train.json", camfile_dict_train, white_background)
-    test_cam_infos_unsorted = readCamerasFromOpenMVG(path, "openMVG/data_openmvg_test.json", camfile_dict_test, white_background)
+    train_cam_infos_unsorted = readCamerasFromOmniMVG(path, "openMVG/data_openmvg_train.json", camfile_dict_train, white_background)
+    test_cam_infos_unsorted = readCamerasFromOmniMVG(path, "openMVG/data_openmvg_test.json", camfile_dict_test, white_background)
 
     train_cam_infos = sorted(train_cam_infos_unsorted.copy(), key = lambda x : x.image_name)
     test_cam_infos = sorted(test_cam_infos_unsorted.copy(), key = lambda x : x.image_name)
