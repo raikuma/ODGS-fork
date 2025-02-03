@@ -389,7 +389,7 @@ def readCamerasDictFromOmniMVG(path, viewfile):
 def readOmniMVGInfo(path, white_background, eval):
     print("Reading Transforms from OmniMVG")
 
-    camfile_dict_train = readCamerasDictFromOmniMVG(os.path.join(path, "openMVG"), "data_openmvg_train.jsonn")
+    camfile_dict_train = readCamerasDictFromOmniMVG(os.path.join(path, "openMVG"), "data_openmvg_train.json")
     camfile_dict_test = readCamerasDictFromOmniMVG(os.path.join(path, "openMVG"), "data_openmvg_test.json")
 
     train_cam_infos_unsorted = readCamerasFromOpenMVG(os.join(path, "openMVG"), "data_openmvg_train.json", camfile_dict_train, white_background)
