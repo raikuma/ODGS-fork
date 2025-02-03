@@ -44,7 +44,9 @@ class Scene:
         ### Note: we use OpenMVG for SfM of omnidirectional image, not Colmap
         # if os.path.exists(os.path.join(args.source_path, "sparse")):
         #     scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
-        if os.path.exists(os.path.join(args.source_path, "data_extrinsics.json")):
+        if os.path.exists(os.path.join(args.source_path, "openMVG")):
+            scene_info = sceneLoadTypeCallbacks["OmniMVG"](args.source_path, args.white_background, args.eval)
+        elif os.path.exists(os.path.join(args.source_path, "data_extrinsics.json")):
             scene_info = sceneLoadTypeCallbacks["OpenMVG"](args.source_path, args.white_background, args.eval)
         else:
             assert False, "Could not recognize scene type!"

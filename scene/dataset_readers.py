@@ -375,10 +375,49 @@ def readOpenMVGInfo(path, white_background, eval):
                            ply_path=ply_path)
     return scene_info
 
+def readCamerasDictFromOmniMVG(path, viewfile):
+    cam_dict = {}
 
+    with open(os.path.join(path, viewfile)) as json_file:
+        contents = json.load(json_file)
+        frames = contents["views"]
+        for frame in frames:
+            cam_dict[frame["key"]] = frame["value"]["ptr_wrapper"]["data"]["filename"]
+
+    return cam_dict
+
+def readOmniMVGInfo(path, white_background, eval):
+    print("Reading Transforms from OmniMVG")
+
+    camfile_dict_train = readCamerasDictFromOmniMVG(os.path.join(path, "openMVG"), "view_train.json")
+    camfile_dict_test = readCamerasDictFromOmniMVG(os.path.join(path, "openMVG"), "view_test.json")
+
+    train_cam_infos_unsorted = readCamerasFromOpenMVG(os.join(path, "openMVG"), "data_openmvg_train.json", camfile_dict_train, white_background)
+    test_cam_infos_unsorted = readCamerasFromOpenMVG(os.join(path, "openMVG"), "data_openmvg_test.json", camfile_dict_test, white_background)
+
+    train_cam_infos = sorted(train_cam_infos_unsorted.copy(), key = lambda x : x.image_name)
+    test_cam_infos = sorted(test_cam_infos_unsorted.copy(), key = lambda x : x.image_name)
+
+    if not eval:
+        train_cam_infos.extend(test_cam_infos)
+        test_cam_infos = []
+
+    nerf_normalization = getNerfppNorm(train_cam_infos)
+
+    ply_path = os.path.join(path, "outputMVG", "scene.ply")
+    pcd = fetchPly(ply_path)
+
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           ply_path=ply_path)
+
+    return scene_info
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
     "Blender" : readNerfSyntheticInfo,
     "OpenMVG" : readOpenMVGInfo,
+    "OmniMVG" : readOmniMVGInfo
 }
