@@ -441,7 +441,7 @@ def readOmniMVGInfo(path, white_background, eval):
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
-    ply_path = os.path.join(path, "outputMVG", "scene.ply")
+    ply_path = os.path.join(path, "openMVG", "scene.ply")
     pcd = fetchPly(ply_path)
 
     scene_info = SceneInfo(point_cloud=pcd,
