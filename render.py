@@ -54,7 +54,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     viewpoint_stack = None
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress", ncols=120)
-    first_iter += 1
+    first_iter = 30000
     time_record = 0
     check_10m, check_100m = 1, 1
     for iteration in range(first_iter, opt.iterations + 1):        
