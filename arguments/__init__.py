@@ -97,6 +97,8 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold_max = 0.0002
         self.dyn_split = False
 
+        self.mask_bottom = False
+
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):
